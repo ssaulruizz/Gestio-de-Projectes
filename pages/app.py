@@ -1,109 +1,349 @@
+# App_full_fixed.py
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
+from collections import Counter
+from io import BytesIO
+import json
 
-st.set_page_config(page_title="Comparador EDV Camps", layout="wide")
-st.title("📊 Comparador de sectors - EDV Camps")
+# Plotly (opcional)
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
+    import plotly.io as pio
+    PLOTLY_AVAILABLE = True
+except Exception:
+    PLOTLY_AVAILABLE = False
 
-uploaded_file = st.file_uploader("📂 Carrega el fitxer Excel", type=["xlsx"])
+st.set_page_config(page_title="EDV Comparator (All features)", layout="wide")
+st.title("📊 EDV Comparator — Full features")
+
+# -------------------------
+# Utilities
+# -------------------------
+def safe_show(df, height=300):
+    """Mostrar DataFrame evitando errores de pyarrow: forzar string si falla."""
+    try:
+        st.dataframe(df, width="stretch")
+    except Exception:
+        st.dataframe(df.astype(str), width="stretch")
+
+
+
+def read_excel_safe(uploaded_file):
+    """Intenta leer un excel con pandas y devuelve df_raw; capta error de openpyxl."""
+    try:
+        return pd.read_excel(uploaded_file, header=None)
+    except Exception as e:
+        st.error(f"Error reading Excel: {e}")
+        st.info("Asegúrate de tener instalado: openpyxl (`pip install openpyxl`) y pandas actualizado.")
+        return None
+
+def parse_sheet_structure(df_raw):
+    idxs = df_raw[df_raw.iloc[:, 2].astype(str).str.contains("Informació sector", case=False, na=False)].index
+    if len(idxs) == 0:
+        return None, None, None
+    start_row = idxs[0] + 1
+
+    raw_vars = df_raw.iloc[start_row:, 3]
+    variables = raw_vars.dropna().astype(str)
+    variables = variables[variables.str.strip() != ""]
+
+    sector_names_raw = df_raw.iloc[start_row - 1, 4:].dropna().astype(str).tolist()
+    counts = Counter()
+    unique_sector_names = []
+    for s in sector_names_raw:
+        counts[s] += 1
+        unique_sector_names.append(f"{s}_{counts[s]}" if counts[s] > 1 else s)
+
+    df_data = df_raw.iloc[variables.index, 4:4 + len(unique_sector_names)].copy()
+    df_data.columns = unique_sector_names
+    df_data.index = variables.values
+    df_data.index.name = "Variable"
+    return df_data, unique_sector_names, start_row
+
+def clean_value(x):
+    if pd.isna(x):
+        return np.nan
+    if isinstance(x, str):
+        x = x.replace("m²s", "").replace("m²st", "").replace("m²", "") \
+             .replace("%", "").replace(" ", "").replace("‐", "-").strip()
+        x = x.replace(",", ".")
+        try:
+            return float(x)
+        except Exception:
+            return np.nan
+    try:
+        return float(x)
+    except Exception:
+        return np.nan
+
+def df_to_excel_bytes(df):
+    towrite = BytesIO()
+    with pd.ExcelWriter(towrite, engine="openpyxl") as writer:
+        df.to_excel(writer, index=True, sheet_name="data")
+    towrite.seek(0)
+    return towrite.getvalue()
+
+def fig_to_png_bytes(fig):
+    if not PLOTLY_AVAILABLE:
+        return None
+    try:
+        return pio.to_image(fig, format="png")
+    except Exception:
+        return None
+
+# -------------------------
+# Session state
+# -------------------------
+if "presets" not in st.session_state:
+    st.session_state.presets = {}
+
+# -------------------------
+# File upload
+# -------------------------
+uploaded_file = st.file_uploader("Upload Excel (.xlsx) with 'Informació sector' in column C", type=["xlsx"])
+
 if uploaded_file:
-    df_raw = pd.read_excel(uploaded_file, header=None)
+    df_raw = read_excel_safe(uploaded_file)
+    if df_raw is None:
+        st.stop()
 
-    # Buscar la fila donde está “Informació sector” (columna C)
-    info_row_idx = df_raw[df_raw.iloc[:, 2].astype(str).str.contains("Informació sector", case=False, na=False)].index
+    df_data, sector_names, start_row = parse_sheet_structure(df_raw)
+    if df_data is None:
+        st.error("Could not find 'Informació sector' in column C. Check file structure.")
+        st.stop()
 
-    if len(info_row_idx) == 0:
-        st.error("❌ No s'ha trobat 'Informació sector' al fitxer.")
-    else:
-        start_row = info_row_idx[0] + 1  # fila siguiente a “Informació sector”
+    # --- Convertir y limpiar numéricos ---
+    # Línea a reemplazar en App.py
+    # Convertir solo valores numéricos; columnas problemáticas se mantienen como string
+    df_numeric = df_data.apply(lambda col: col.map(clean_value))
+    # Forzar todas las columnas a string antes de mostrarlas para evitar error de pyarrow
+    df_data = df_data.astype(str)
 
-        # --- Extraer variables y valores ---
-        variables = df_raw.iloc[start_row:, 3].dropna().tolist()
-        df_data = df_raw.iloc[start_row:, 4:]
-        sector_names = df_raw.iloc[start_row - 1, 4:].dropna().astype(str).tolist()
+    st.success("File loaded and parsed successfully.")
+    st.subheader("Preview: extracted variables & sectors (first 10 rows)")
+    safe_show(df_data.head(10))
 
-        # Asegurar longitudes compatibles
-        min_len = min(len(variables), len(df_data))
-        df_data = df_data.iloc[:min_len, :len(sector_names)]
+    # -------------------------
+    # Sidebar: modes
+    # -------------------------
+    st.sidebar.header("View / Mode")
+    mode = st.sidebar.radio("Choose view:", ["Compare EDVs", "Single EDV", "Statistics", "Export", "Presets"])
+    all_variables = df_data.index.tolist()
+    all_sectors = df_data.columns.tolist()
 
-        # --- Evitar nombres duplicados ---
-        from collections import Counter
+    # -------------------------
+    # MODE: Compare EDVs
+    # -------------------------
+    if mode == "Compare EDVs":
+        st.subheader("Compare multiple EDVs")
+        with st.sidebar.expander("Comparison options", expanded=True):
+            selected_sectors = st.multiselect("Select EDVs (sectors) to compare", all_sectors, default=all_sectors[:3])
+            selected_vars = st.multiselect("Select variables", all_variables, default=all_variables[:6] if len(all_variables) >= 6 else all_variables)
+            chart_type = st.selectbox("Chart type", ["Bar (grouped)", "Bar (stacked)", "Line", "Scatter", "Boxplot", "Radar"])
+            normalize = st.checkbox("Normalize variables (0-1) per variable", value=False)
+            show_table = st.checkbox("Show underlying numeric table", value=False)
 
-        counts = Counter()
-        unique_sector_names = []
-        for s in sector_names:
-            counts[s] += 1
-            if counts[s] > 1:
-                unique_sector_names.append(f"{s}_{counts[s]}")
-            else:
-                unique_sector_names.append(s)
-
-        df_data.columns = unique_sector_names
-        df_data.index = variables[:min_len]
-        df_data.index.name = "Variable"
-
-        # --- Limpieza numérica ---
-        def clean_value(x):
-            if isinstance(x, str):
-                x = x.replace("m²s", "").replace("m²st", "").replace("%", "").replace(",", ".").strip()
-                try:
-                    return float(x)
-                except ValueError:
-                    return np.nan
-            return x
-
-        df_numeric = df_data.applymap(clean_value)
-        df_numeric = df_numeric.apply(pd.to_numeric, errors="coerce")
-
-        st.success("✅ Fitxer carregat correctament.")
-        st.subheader("Vista prèvia de les dades")
-        st.dataframe(df_data.head(10))
-
-        # --- Selector ---
-        st.sidebar.header("⚙️ Opcions de visualització")
-        vista = st.sidebar.radio("Tria el tipus de vista", ["Taula", "Gràfic"])
-
-        if vista == "Taula":
-            st.subheader("📋 Taula de dades")
-            st.dataframe(df_data)
-
-            st.markdown("#### 📊 Estadístiques:")
-            mean_sector = df_numeric.mean().round(2)
-            st.write("**Mitjana per sector:**")
-            st.dataframe(mean_sector)
-
-            overall_mean = df_numeric.stack().mean().round(2)
-            st.write(f"**Mitjana global:** {overall_mean:,}")
-
+        if not selected_sectors or not selected_vars:
+            st.info("Choose at least one EDV and one variable.")
         else:
-            
-            st.subheader("📈 Gràfic comparatiu")
-
-            # Convertir el índice a lista explícitamente
-            variable_list = df_data.index.tolist()
-
-            selected_vars = st.multiselect(
-                "Selecciona variables per comparar:",
-                options=variable_list,
-                default=variable_list[:5] if len(variable_list) >= 5 else variable_list
-            )
-
-            if len(selected_vars) > 0:
-                df_plot = df_numeric.loc[selected_vars].T
-
-                # Verificar que haya valores numéricos
-                if df_plot.dropna(how="all").shape[0] == 0:
-                    st.warning("⚠️ No hi ha valors numèrics per a aquestes variables.")
-                else:
-                    df_plot.plot(kind="bar", figsize=(10, 6))
-                    plt.title("Comparació entre sectors")
-                    plt.xlabel("Sector")
-                    plt.ylabel("Valor numèric")
-                    plt.xticks(rotation=45)
-                    st.pyplot(plt)
+            df_plot = df_numeric.loc[selected_vars, selected_sectors].T
+            if df_plot.dropna(how="all").shape[0] == 0:
+                st.warning("No numeric values available for the selection.")
             else:
-                st.info("Selecciona almenys una variable per mostrar el gràfic.")
+                plot_df = (df_plot - df_plot.min()) / (df_plot.max() - df_plot.min()) if normalize else df_plot
+
+                if not PLOTLY_AVAILABLE:
+                    st.warning("Plotly not installed. Showing table instead.")
+                    safe_show(plot_df)
+                else:
+                    if chart_type.startswith("Bar"):
+                        barmode = "group" if "grouped" in chart_type.lower() else "stack"
+                        fig = px.bar(plot_df, x=plot_df.index, y=plot_df.columns, barmode=barmode,
+                                     labels={"value": "Value", "index": "EDV"}, title="Comparison: EDVs vs Variables")
+                        st.plotly_chart(fig, width="stretch")
+                    elif chart_type == "Line":
+                        fig = px.line(plot_df, x=plot_df.index, y=plot_df.columns, markers=True,
+                                      labels={"value": "Value", "index": "EDV"}, title="Line chart: EDVs")
+                        st.plotly_chart(fig, width="stretch")
+                    elif chart_type == "Scatter":
+                        cols_for_scatter = selected_vars[:6] if len(selected_vars) > 6 else selected_vars
+                        fig = px.scatter_matrix(df_numeric[selected_sectors].loc[cols_for_scatter].T,
+                                                dimensions=cols_for_scatter, title="Scatter matrix")
+                        fig.update_traces(diagonal_visible=False)
+                        st.plotly_chart(fig, width="stretch")
+                    elif chart_type == "Boxplot":
+                        df_long = df_numeric.loc[selected_vars, selected_sectors].T.melt(var_name="Variable", value_name="Value")
+                        fig = px.box(df_long, x="Variable", y="Value", color="Variable", title="Boxplot per variable")
+                        st.plotly_chart(fig, width="stretch")
+                    elif chart_type == "Radar":
+                        fig = go.Figure()
+                        theta = selected_vars
+                        for s in selected_sectors:
+                            r = df_numeric.loc[selected_vars, s].fillna(0).values.tolist()
+                            fig.add_trace(go.Scatterpolar(r=r, theta=theta, fill="toself", name=s))
+                        fig.update_layout(polar=dict(radialaxis=dict(visible=True)), title="Radar chart")
+                        st.plotly_chart(fig, width="stretch")
+
+                if show_table:
+                    st.markdown("### Numeric values used for the chart")
+                    safe_show(df_plot)
+
+    # -------------------------
+    # MODE: Single EDV
+    # -------------------------
+    elif mode == "Single EDV":
+        st.subheader("Single EDV (detailed) view")
+        with st.sidebar.expander("Single EDV options", expanded=True):
+            selected_sector = st.selectbox("Choose EDV / Sector", all_sectors)
+            top_n = st.number_input("Show top N variables by value (0 to show all)", min_value=0, max_value=len(all_variables), value=0)
+            show_raw = st.checkbox("Show raw (string) table", value=False)
+            chart_types = st.multiselect("Charts to show", ["Bar", "Line", "Radar", "Histogram"], default=["Bar", "Radar"])
+
+        if selected_sector:
+            df_single_raw = df_data[selected_sector]
+            df_single_num = df_numeric[selected_sector].dropna()
+
+            st.markdown(f"## {selected_sector}")
+            cols = st.columns((1, 1))
+            with cols[0]:
+                st.markdown("### Data (numeric preview)")
+                safe_show(df_single_num.to_frame(name="Value").head(20))
+                if show_raw:
+                    st.markdown("### Raw extracted values (strings)")
+                    safe_show(df_single_raw.head(20))
+            with cols[1]:
+                st.markdown("### Summary statistics")
+                if df_single_num.empty:
+                    st.warning("No numeric values available for this EDV.")
+                else:
+                    st.write(df_single_num.describe().round(3))
+            if top_n > 0 and not df_single_num.empty:
+                st.markdown(f"### Top {top_n} variables by value")
+                safe_show(df_single_num.sort_values(ascending=False).head(top_n).to_frame("Value"))
+
+            if PLOTLY_AVAILABLE and not df_single_num.empty:
+                for ct in chart_types:
+                    if ct == "Bar":
+                        fig = px.bar(df_single_num.sort_values(ascending=False), title=f"{selected_sector} - Bar")
+                        st.plotly_chart(fig, width="stretch")
+                    elif ct == "Line":
+                        fig = px.line(df_single_num, title=f"{selected_sector} - Line", markers=True)
+                        st.plotly_chart(fig, width="stretch")
+                    elif ct == "Radar":
+                        vars_for_radar = df_single_num.index.tolist()
+                        if len(vars_for_radar) < 3:
+                            st.info("Radar chart needs at least 3 variables.")
+                        else:
+                            fig = go.Figure()
+                            fig.add_trace(go.Scatterpolar(r=df_single_num.values, theta=vars_for_radar, fill="toself", name=selected_sector))
+                            fig.update_layout(title=f"{selected_sector} - Radar", polar=dict(radialaxis=dict(visible=True)))
+                            st.plotly_chart(fig, width="stretch")
+                    elif ct == "Histogram":
+                        fig = px.histogram(df_single_num, x=df_single_num.values, nbins=20, title=f"{selected_sector} - Histogram")
+                        st.plotly_chart(fig, width="stretch")
+            elif not PLOTLY_AVAILABLE:
+                st.info("Install plotly to view interactive charts (`pip install plotly`).")
+
+    # -------------------------
+    # MODE: Statistics
+    # -------------------------
+    elif mode == "Statistics":
+        st.subheader("Statistics & Correlations")
+        with st.sidebar.expander("Stats options", expanded=True):
+            corr_method = st.selectbox("Correlation method", ["pearson", "kendall", "spearman"])
+            show_heatmap = st.checkbox("Show correlation heatmap", value=True)
+            show_describe = st.checkbox("Show describe() tables", value=True)
+
+        if show_describe:
+            st.markdown("### Mean per EDV")
+            safe_show(df_numeric.mean().round(3).to_frame("mean"))
+            st.markdown("### Mean per variable (top 30)")
+            safe_show(df_numeric.mean(axis=1).round(3).sort_values(ascending=False).head(30).to_frame("mean"))
+
+        if show_heatmap and PLOTLY_AVAILABLE:
+            corr_df = df_numeric.corr(method=corr_method)
+            st.markdown("### Correlation heatmap between EDVs")
+            fig = px.imshow(corr_df, text_auto=True, aspect="auto", title=f"Correlation ({corr_method})")
+            st.plotly_chart(fig, width="stretch")
+        elif show_heatmap:
+            st.info("Install plotly to view heatmap.")
+
+    # -------------------------
+    # MODE: Export
+    # -------------------------
+    elif mode == "Export":
+        st.subheader("Export data and charts")
+        with st.sidebar.expander("Export options", expanded=True):
+            export_scope = st.selectbox("Export scope", ["All numeric data", "Selected EDVs/Vars (custom)"])
+            if export_scope == "Selected EDVs/Vars (custom)":
+                exp_sectors = st.multiselect("Select EDVs to export", all_sectors, default=all_sectors[:3])
+                exp_vars = st.multiselect("Select variables to export", all_variables, default=all_variables[:10] if len(all_variables) >= 10 else all_variables)
+            else:
+                exp_sectors = all_sectors
+                exp_vars = all_variables
+            create_excel = st.checkbox("Create Excel file", value=True)
+            chart_for_export = st.selectbox("Create PNG from chart", ["None", "Comparison Bar (first 10 vars)", "Single EDV Bar"])
+            png_sector = None
+            if chart_for_export == "Single EDV Bar":
+                png_sector = st.selectbox("Choose EDV for PNG", all_sectors)
+
+        export_df = df_numeric.loc[exp_vars, exp_sectors]
+        if create_excel:
+            try:
+                excel_bytes = df_to_excel_bytes(export_df)
+                st.download_button("Download Excel (.xlsx)", data=excel_bytes, file_name="edv_export.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            except Exception as e:
+                st.error(f"Error creating Excel: {e}. Ensure openpyxl is installed.")
+
+        if chart_for_export != "None" and PLOTLY_AVAILABLE:
+            fig = None
+            if chart_for_export == "Comparison Bar (first 10 vars)":
+                vars_to_plot = exp_vars[:10] if len(exp_vars) > 0 else all_variables[:10]
+                sectors_to_plot = exp_sectors[:8] if len(exp_sectors) > 0 else all_sectors[:8]
+                df_plot = df_numeric.loc[vars_to_plot, sectors_to_plot].T
+                fig = px.bar(df_plot, barmode="group", title="Export Chart: Comparison")
+            elif chart_for_export == "Single EDV Bar" and png_sector:
+                df_single = df_numeric[png_sector].dropna()
+                fig = px.bar(df_single.sort_values(ascending=False), title=f"{png_sector} - Bar")
+            if fig is not None:
+                png_bytes = fig_to_png_bytes(fig)
+                if png_bytes:
+                    st.download_button("Download chart PNG", data=png_bytes, file_name="chart.png", mime="image/png")
+                else:
+                    st.warning("Automatic PNG generation failed. Install 'kaleido' for export.")
+
+    # -------------------------
+    # MODE: Presets
+    # -------------------------
+    elif mode == "Presets":
+        st.subheader("Presets — save/load your selections")
+        st.markdown("### Save a new preset")
+        preset_name = st.text_input("Preset name")
+        if st.button("Save current selection as preset") and preset_name.strip() != "":
+            preset = {
+                "variables": st.sidebar.session_state.get("selected_vars") if "selected_vars" in st.sidebar.session_state else None,
+                "sectors": st.sidebar.session_state.get("selected_sectors") if "selected_sectors" in st.sidebar.session_state else None,
+                "mode": mode
+            }
+            st.session_state.presets[preset_name] = preset
+            st.success(f"Preset '{preset_name}' saved.")
+
+        st.markdown("### Manage presets")
+        if st.session_state.presets:
+            for name, data in st.session_state.presets.items():
+                col1, col2, col3 = st.columns([3,1,1])
+                col1.write(f"**{name}** — {json.dumps(data)}")
+                if col2.button("Load", key=f"load_{name}"):
+                    st.info(f"Loading preset '{name}' (session only).")
+                if col3.button("Delete", key=f"del_{name}"):
+                    del st.session_state.presets[name]
+                    st.experimental_rerun()
+            presets_json = json.dumps(st.session_state.presets, indent=2)
+            st.download_button("Download presets JSON", data=presets_json.encode("utf-8"), file_name="edv_presets.json", mime="application/json")
+        else:
+            st.info("No presets saved yet.")
 
 else:
-    st.info("⬆️ Carrega un fitxer Excel per començar.")
+    st.info("Upload an Excel file to start. Must contain 'Informació sector' in column C.")
