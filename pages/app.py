@@ -231,7 +231,7 @@ if uploaded_file:
 
                 if show_table:
                     st.markdown("### Numeric values used for the chart")
-                    safe_show(plot_df)
+                    safe_show(plot_df)  
     # -------------------------
     # MODE: Single EDV
     # -------------------------
@@ -248,46 +248,109 @@ if uploaded_file:
             df_single_num = df_numeric[selected_sector].dropna()
 
             st.markdown(f"## {selected_sector}")
+            
             cols = st.columns((1, 1))
+                    
             with cols[0]:
-                st.markdown("### Data (numeric preview)")
-                safe_show(df_single_num.to_frame(name="Value").head(20))
-                if show_raw:
-                    st.markdown("### Raw extracted values (strings)")
-                    safe_show(df_single_raw.head(20))
-            with cols[1]:
                 st.markdown("### Summary statistics")
                 if df_single_num.empty:
                     st.warning("No numeric values available for this EDV.")
                 else:
-                    st.write(df_single_num.describe().round(3))
+                    # Crear estadísticas de forma segura
+                    try:
+                        stats = df_single_num.describe().round(3)
+                        stats_df = stats.to_frame(name="Value")
+                        safe_show(stats_df)
+                    except Exception as e:
+                        st.error(f"Error calculating statistics: {e}")
+                        st.info("Showing basic info instead")
+                        st.write(f"Total variables: {len(df_single_num)}")
+                        st.write(f"Non-null values: {df_single_num.count()}")
+                        
             if top_n > 0 and not df_single_num.empty:
                 st.markdown(f"### Top {top_n} variables by value")
-                safe_show(df_single_num.sort_values(ascending=False).head(top_n).to_frame("Value"))
+                try:
+                    top_df = df_single_num.sort_values(ascending=False).head(top_n).to_frame("Value")
+                    top_df = top_df.fillna('N/A')
+                    safe_show(top_df)
+                except Exception as e:
+                    st.error(f"Error displaying top variables: {e}")
 
+            # GRÁFICOS - con manejo robusto de errores
             if PLOTLY_AVAILABLE and not df_single_num.empty:
                 for ct in chart_types:
-                    if ct == "Bar":
-                        fig = px.bar(df_single_num.sort_values(ascending=False), title=f"{selected_sector} - Bar")
-                        st.plotly_chart(fig, use_container_width=True)
-                    elif ct == "Line":
-                        fig = px.line(df_single_num, title=f"{selected_sector} - Line", markers=True)
-                        st.plotly_chart(fig, use_container_width=True)
-                    elif ct == "Radar":
-                        vars_for_radar = df_single_num.index.tolist()
-                        if len(vars_for_radar) < 3:
-                            st.info("Radar chart needs at least 3 variables.")
-                        else:
-                            fig = go.Figure()
-                            fig.add_trace(go.Scatterpolar(r=df_single_num.values, theta=vars_for_radar, fill="toself", name=selected_sector))
-                            fig.update_layout(title=f"{selected_sector} - Radar", polar=dict(radialaxis=dict(visible=True)))
+                    try:
+                        if ct == "Bar":
+                            # Preparar datos para bar chart
+                            plot_data = df_single_num.sort_values(ascending=False)
+                            # Limitar a los primeros 20 para mejor visualización
+                            if len(plot_data) > 20:
+                                plot_data = plot_data.head(20)
+                                st.info(f"Showing top 20 of {len(df_single_num)} variables")
+                                
+                            fig = px.bar(
+                                x=plot_data.index, 
+                                y=plot_data.values,
+                                title=f"{selected_sector} - Bar Chart",
+                                labels={'x': 'Variable', 'y': 'Value'}
+                            )
+                            fig.update_layout(xaxis_tickangle=-45)
                             st.plotly_chart(fig, use_container_width=True)
-                    elif ct == "Histogram":
-                        fig = px.histogram(df_single_num, x=df_single_num.values, nbins=20, title=f"{selected_sector} - Histogram")
-                        st.plotly_chart(fig, use_container_width=True)
-            elif not PLOTLY_AVAILABLE:
+                            
+                        elif ct == "Line":
+                            # Para line chart, usar valores ordenados por índice
+                            plot_data = df_single_num.sort_index()
+                            fig = px.line(
+                                x=range(len(plot_data)), 
+                                y=plot_data.values,
+                                title=f"{selected_sector} - Line Chart",
+                                labels={'x': 'Variable Index', 'y': 'Value'},
+                                markers=True
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                        elif ct == "Radar":
+                            vars_for_radar = df_single_num.index.tolist()
+                            if len(vars_for_radar) < 3:
+                                st.info("Radar chart needs at least 3 variables.")
+                            else:
+                                # Limitar a 10 variables para radar legible
+                                if len(vars_for_radar) > 10:
+                                    vars_for_radar = vars_for_radar[:10]
+                                    st.info("Showing first 10 variables for radar chart")
+                                    
+                                fig = go.Figure()
+                                fig.add_trace(go.Scatterpolar(
+                                    r=df_single_num.loc[vars_for_radar].fillna(0).values, 
+                                    theta=vars_for_radar, 
+                                    fill="toself", 
+                                    name=selected_sector
+                                ))
+                                fig.update_layout(
+                                    title=f"{selected_sector} - Radar Chart", 
+                                    polar=dict(radialaxis=dict(visible=True))
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
+                                
+                        elif ct == "Histogram":
+                            # Filtrar valores infinitos o extremos
+                            hist_data = df_single_num.replace([np.inf, -np.inf], np.nan).dropna()
+                            if not hist_data.empty:
+                                fig = px.histogram(
+                                    x=hist_data.values, 
+                                    nbins=20, 
+                                    title=f"{selected_sector} - Value Distribution"
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.warning("No valid data for histogram")
+                                
+                    except Exception as e:
+                        st.error(f"Error creating {ct} chart: {str(e)}")
+                        st.info("Try selecting different variables or check data quality")
+                        
+            elif not PLOTLY_AVAILABLE and not df_single_num.empty:
                 st.info("Install plotly to view interactive charts (`pip install plotly`).")
-
     # -------------------------
     # MODE: Statistics
     # -------------------------
