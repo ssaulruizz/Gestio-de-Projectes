@@ -24,11 +24,9 @@ st.title("📊 EDV Comparator — Full features")
 def safe_show(df, height=300):
     """Mostrar DataFrame evitando errores de pyarrow: forzar string si falla."""
     try:
-        st.dataframe(df, width="stretch")
+        st.dataframe(df, use_container_width=True)
     except Exception:
-        st.dataframe(df.astype(str), width="stretch")
-
-
+        st.dataframe(df.astype(str), use_container_width=True)
 
 def read_excel_safe(uploaded_file):
     """Intenta leer un excel con pandas y devuelve df_raw; capta error de openpyxl."""
@@ -115,8 +113,6 @@ if uploaded_file:
         st.stop()
 
     # --- Convertir y limpiar numéricos ---
-    # Línea a reemplazar en App.py
-    # Convertir solo valores numéricos; columnas problemáticas se mantienen como string
     df_numeric = df_data.apply(lambda col: col.map(clean_value))
     # Forzar todas las columnas a string antes de mostrarlas para evitar error de pyarrow
     df_data = df_data.astype(str)
@@ -148,48 +144,94 @@ if uploaded_file:
         if not selected_sectors or not selected_vars:
             st.info("Choose at least one EDV and one variable.")
         else:
-            df_plot = df_numeric.loc[selected_vars, selected_sectors].T
+            df_plot = df_numeric.loc[selected_vars, selected_sectors]
+            
             if df_plot.dropna(how="all").shape[0] == 0:
                 st.warning("No numeric values available for the selection.")
             else:
-                plot_df = (df_plot - df_plot.min()) / (df_plot.max() - df_plot.min()) if normalize else df_plot
+                # Preparar datos para Plotly de forma correcta
+                plot_df = df_plot.copy()
+                if normalize:
+                    plot_df = (plot_df - plot_df.min()) / (plot_df.max() - plot_df.min())
 
                 if not PLOTLY_AVAILABLE:
                     st.warning("Plotly not installed. Showing table instead.")
-                    safe_show(plot_df)
+                    safe_show(plot_df.T)  # Transponer para mejor visualización en tabla
                 else:
+                    # Crear DataFrame largo (tidy) para Plotly
+                    df_long = plot_df.reset_index().melt(
+                        id_vars=['Variable'], 
+                        value_vars=selected_sectors,
+                        var_name='Sector', 
+                        value_name='Value'
+                    )
+                    
                     if chart_type.startswith("Bar"):
                         barmode = "group" if "grouped" in chart_type.lower() else "stack"
-                        fig = px.bar(plot_df, x=plot_df.index, y=plot_df.columns, barmode=barmode,
-                                     labels={"value": "Value", "index": "EDV"}, title="Comparison: EDVs vs Variables")
-                        st.plotly_chart(fig, width="stretch")
+                        fig = px.bar(
+                            df_long, 
+                            x='Variable', 
+                            y='Value', 
+                            color='Sector',
+                            barmode=barmode,
+                            title="Comparison: Variables across EDVs",
+                            labels={"Value": "Value", "Variable": "Variable"}
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
                     elif chart_type == "Line":
-                        fig = px.line(plot_df, x=plot_df.index, y=plot_df.columns, markers=True,
-                                      labels={"value": "Value", "index": "EDV"}, title="Line chart: EDVs")
-                        st.plotly_chart(fig, width="stretch")
+                        fig = px.line(
+                            df_long, 
+                            x='Variable', 
+                            y='Value', 
+                            color='Sector',
+                            markers=True,
+                            title="Line chart: Variables across EDVs",
+                            labels={"Value": "Value", "Variable": "Variable"}
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
                     elif chart_type == "Scatter":
                         cols_for_scatter = selected_vars[:6] if len(selected_vars) > 6 else selected_vars
-                        fig = px.scatter_matrix(df_numeric[selected_sectors].loc[cols_for_scatter].T,
-                                                dimensions=cols_for_scatter, title="Scatter matrix")
+                        # Para scatter matrix, necesitamos los datos en formato ancho por sector
+                        scatter_df = df_numeric.loc[cols_for_scatter, selected_sectors].T
+                        fig = px.scatter_matrix(
+                            scatter_df,
+                            dimensions=cols_for_scatter, 
+                            title="Scatter matrix by EDV"
+                        )
                         fig.update_traces(diagonal_visible=False)
-                        st.plotly_chart(fig, width="stretch")
+                        st.plotly_chart(fig, use_container_width=True)
+                        
                     elif chart_type == "Boxplot":
-                        df_long = df_numeric.loc[selected_vars, selected_sectors].T.melt(var_name="Variable", value_name="Value")
-                        fig = px.box(df_long, x="Variable", y="Value", color="Variable", title="Boxplot per variable")
-                        st.plotly_chart(fig, width="stretch")
+                        fig = px.box(
+                            df_long, 
+                            x='Variable', 
+                            y='Value', 
+                            color='Sector',
+                            title="Boxplot per variable across EDVs"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
                     elif chart_type == "Radar":
                         fig = go.Figure()
-                        theta = selected_vars
-                        for s in selected_sectors:
-                            r = df_numeric.loc[selected_vars, s].fillna(0).values.tolist()
-                            fig.add_trace(go.Scatterpolar(r=r, theta=theta, fill="toself", name=s))
-                        fig.update_layout(polar=dict(radialaxis=dict(visible=True)), title="Radar chart")
-                        st.plotly_chart(fig, width="stretch")
+                        for sector in selected_sectors:
+                            sector_data = plot_df[sector].fillna(0)
+                            fig.add_trace(go.Scatterpolar(
+                                r=sector_data.values, 
+                                theta=plot_df.index.tolist(), 
+                                fill='toself', 
+                                name=sector
+                            ))
+                        fig.update_layout(
+                            polar=dict(radialaxis=dict(visible=True)),
+                            title="Radar chart: Variables comparison"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
 
                 if show_table:
                     st.markdown("### Numeric values used for the chart")
-                    safe_show(df_plot)
-
+                    safe_show(plot_df)
     # -------------------------
     # MODE: Single EDV
     # -------------------------
@@ -227,10 +269,10 @@ if uploaded_file:
                 for ct in chart_types:
                     if ct == "Bar":
                         fig = px.bar(df_single_num.sort_values(ascending=False), title=f"{selected_sector} - Bar")
-                        st.plotly_chart(fig, width="stretch")
+                        st.plotly_chart(fig, use_container_width=True)
                     elif ct == "Line":
                         fig = px.line(df_single_num, title=f"{selected_sector} - Line", markers=True)
-                        st.plotly_chart(fig, width="stretch")
+                        st.plotly_chart(fig, use_container_width=True)
                     elif ct == "Radar":
                         vars_for_radar = df_single_num.index.tolist()
                         if len(vars_for_radar) < 3:
@@ -239,10 +281,10 @@ if uploaded_file:
                             fig = go.Figure()
                             fig.add_trace(go.Scatterpolar(r=df_single_num.values, theta=vars_for_radar, fill="toself", name=selected_sector))
                             fig.update_layout(title=f"{selected_sector} - Radar", polar=dict(radialaxis=dict(visible=True)))
-                            st.plotly_chart(fig, width="stretch")
+                            st.plotly_chart(fig, use_container_width=True)
                     elif ct == "Histogram":
                         fig = px.histogram(df_single_num, x=df_single_num.values, nbins=20, title=f"{selected_sector} - Histogram")
-                        st.plotly_chart(fig, width="stretch")
+                        st.plotly_chart(fig, use_container_width=True)
             elif not PLOTLY_AVAILABLE:
                 st.info("Install plotly to view interactive charts (`pip install plotly`).")
 
@@ -266,7 +308,7 @@ if uploaded_file:
             corr_df = df_numeric.corr(method=corr_method)
             st.markdown("### Correlation heatmap between EDVs")
             fig = px.imshow(corr_df, text_auto=True, aspect="auto", title=f"Correlation ({corr_method})")
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
         elif show_heatmap:
             st.info("Install plotly to view heatmap.")
 
@@ -323,8 +365,8 @@ if uploaded_file:
         preset_name = st.text_input("Preset name")
         if st.button("Save current selection as preset") and preset_name.strip() != "":
             preset = {
-                "variables": st.sidebar.session_state.get("selected_vars") if "selected_vars" in st.sidebar.session_state else None,
-                "sectors": st.sidebar.session_state.get("selected_sectors") if "selected_sectors" in st.sidebar.session_state else None,
+                "variables": st.session_state.get("selected_vars", []),
+                "sectors": st.session_state.get("selected_sectors", []),
                 "mode": mode
             }
             st.session_state.presets[preset_name] = preset
@@ -339,7 +381,7 @@ if uploaded_file:
                     st.info(f"Loading preset '{name}' (session only).")
                 if col3.button("Delete", key=f"del_{name}"):
                     del st.session_state.presets[name]
-                    st.experimental_rerun()
+                    st.rerun()
             presets_json = json.dumps(st.session_state.presets, indent=2)
             st.download_button("Download presets JSON", data=presets_json.encode("utf-8"), file_name="edv_presets.json", mime="application/json")
         else:
