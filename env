@@ -1,0 +1,24 @@
+# ============================================================================
+# CONFIGURACIÓ DE CONNEXIÓ A BASE DE DADES
+# ============================================================================
+# Copia aquest fitxer a .env i completa amb les teves dades
+
+# HOST de la base de dades
+DB_HOST=localhost
+
+# Usuari de MySQL
+DB_USER=root
+
+# Contrasenya de MySQL
+DB_PASSWORD=1234
+
+# Nom de la base de dades
+DB_NAME=gestio_de_projectes
+
+# ============================================================================
+# NOTES:
+# - Si utilitzes XAMPP: localhost, root (sense contrasenya)
+# - Si utilitzes Docker: prova amb docker host o IP del contenidor
+# - Si la contrasenya té caràcters especials, posició entre cometes dobles
+# - Assegura't que el servidor MySQL està en marxa
+# ============================================================================

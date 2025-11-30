@@ -1,0 +1,510 @@
+# 🚀 Guia d'Instal·lació i Execució - EDV Comparator
+
+## 📋 Índex Ràpid
+1. [Requisits](#requisits)
+2. [Instal·lació de Python](#instal-lació-de-python)
+3. [Instal·lació de MySQL](#instal-lació-de-mysql)
+4. [Configuració de la Base de Dades](#configuració-de-la-base-de-dades)
+5. [Descàrrega del Projecte](#descàrrega-del-projecte)
+6. [Configuració de Secrets](#configuració-de-secrets)
+7. [Instal·lació de Dependències](#instal-lació-de-dependències)
+8. [Execució de l'Aplicació](#execució-de-lapplicació)
+9. [Solució de Problemes](#solució-de-problemes)
+
+---
+
+## 📦 Requisits
+
+Abans de começar, necessites:
+
+✅ **Ordinador amb Windows, Mac o Linux**  
+✅ **Internet**  
+✅ **Accés com a administrador** (pot ser necessari)  
+
+---
+
+## 🐍 Instal·lació de Python
+
+Python és el llenguatge de programació necessari per executar l'app.
+
+### Pas 1: Descarregar Python
+
+1. Ves a: https://www.python.org/downloads/
+2. Clica el botó gran **"Download Python"** (versió 3.11 o superior)
+3. Espera que es descarregui (fitxer `.exe` en Windows)
+
+### Pas 2: Instal·lar Python
+
+**En Windows:**
+1. Busca el fitxer descarregat (normalment a `Descàrregues`)
+2. Fes doble clic per obrir l'instal·lador
+3. ⚠️ **IMPORTANT**: Marca la casella **"Add Python to PATH"**
+4. Clica **"Install Now"**
+5. Espera fins que finalitzi
+6. Clica **"Close"**
+
+**En Mac:**
+1. Fes doble clic al fitxer `.pkg`
+2. Segueix els passos de l'instal·lador
+3. Introdueix la contrasenya si és necessari
+
+**En Linux:**
+```bash
+sudo apt-get install python3 python3-pip
+```
+
+### Pas 3: Verifica que Python està instal·lat
+
+Obre el "Command Prompt" (Windows) o "Terminal" (Mac/Linux):
+- **Windows**: Prem `Windows + R`, escriu `cmd`, prem Enter
+- **Mac**: Prem `Cmd + Space`, escriu `Terminal`, prem Enter
+- **Linux**: Obre Terminal
+
+Escriu:
+```bash
+python --version
+```
+
+Hauria de mostrar algo com: `Python 3.11.0` ✅
+
+---
+
+## 🗄️ Instal·lació de MySQL
+
+MySQL és el servidor de base de dades on es guarden els dades.
+
+### Pas 1: Descarregar MySQL
+
+1. Ves a: https://dev.mysql.com/downloads/mysql/
+2. Selecciona la teva plataforma (Windows, Mac, Linux)
+3. Clica **"Download"** (versió 8.0 o superior)
+4. Si pida registre, clica **"No thanks, just start my download"**
+
+### Pas 2: Instal·lar MySQL
+
+**En Windows:**
+1. Fes doble clic al fitxer `.msi` descarregat
+2. Clica **"Next"** en els diàlegs
+3. En la pantalla de **"Type and Networking"**, deixa les opcions per defecte
+4. En la pantalla de **"MySQL Server Configuration"**:
+   - Puerto: **3306** (per defecte)
+   - Clica **"Next"**
+5. En la pantalla de **"Accounts and Roles"**:
+   - Username: **root**
+   - Password: deixa buit (o escriu algo simple)
+   - Clica **"Next"**
+6. Clica **"Finish"** i espera
+
+**En Mac/Linux:**
+Usa Homebrew (si està instal·lat):
+```bash
+brew install mysql
+brew services start mysql
+```
+
+### Pas 3: Verifica que MySQL està corrient
+
+Obre Command Prompt/Terminal i escriu:
+```bash
+mysql -u root
+```
+
+Si veus algo com:
+```
+mysql>
+```
+
+Significa que MySQL està corrint ✅
+
+Escriu `EXIT` per sortir.
+
+---
+
+## 🔧 Configuració de la Base de Dades
+
+### Pas 1: Crea la Base de Dades
+
+Obre Command Prompt/Terminal i escriu:
+
+```bash
+mysql -u root
+```
+
+Després escriu aquestes comandes (una per una, prem Enter després de cada):
+
+```sql
+CREATE DATABASE gestio_de_projectes;
+USE gestio_de_projectes;
+EXIT
+```
+
+### Pas 2: Importa les Dades
+
+Si tens un fitxer SQL amb dades (ex: `insert_edv_data_ORDENADO.sql`), executar:
+
+```bash
+mysql -u root gestio_de_projectes < insert_edv_data_ORDENADO.sql
+```
+
+⚠️ **Nota**: Substituteix `insert_edv_data_ORDENADO.sql` pel nom correcte del fitxer
+
+### Pas 3: Verifica la Base de Dades
+
+Obre Command Prompt/Terminal i escriu:
+
+```bash
+mysql -u root gestio_de_projectes
+```
+
+Després escriu:
+```sql
+SHOW TABLES;
+```
+
+Hauria de mostrar la taula `edv_fitxes` ✅
+
+Escriu `EXIT` per sortir.
+
+---
+
+## 📂 Descàrrega del Projecte
+
+### Pas 1: Crea una Carpeta per al Projecte
+
+**En Windows:**
+1. Obre "Explorador de Fitxers"
+2. Navega a "Documents" o "Escriptori"
+3. Fes clic dret → **"Nova carpeta"**
+4. Nomena-la: `EDV_Comparador`
+5. Entra a la carpeta (doble clic)
+
+**En Mac/Linux:**
+```bash
+mkdir ~/EDV_Comparador
+cd ~/EDV_Comparador
+```
+
+### Pas 2: Descàrrega els Fitxers del Projecte
+
+1. Descàrrega els fitxers del projecte:
+   - `Home.py`
+   - `requirements.txt`
+   - `README.txt`
+   
+2. Guarda'ls a la carpeta `EDV_Comparador`
+
+---
+
+## 🔐 Configuració de Secrets
+
+### Pas 1: Crea la Carpeta `.streamlit`
+
+**En Windows (via Explorador):**
+1. Obre la carpeta `EDV_Comparador`
+2. Fes clic dret en un espai buit → **"Nova carpeta"**
+3. Nomena-la: `.streamlit`
+4. (Si no la veus, vas a View → Show hidden files)
+
+**En Mac/Linux (via Terminal):**
+```bash
+mkdir ~/.streamlit
+```
+
+### Pas 2: Crea el Fitxer `secrets.toml`
+
+**En Windows (amb Bloc de Notes):**
+1. Fes clic dret dins de la carpeta `.streamlit` → **"Nou"** → **"Document de Text"**
+2. Nomena el fitxer: `secrets.toml` (no `secrets.toml.txt`)
+3. Obri amb Bloc de Notes
+4. Copia i enganxa lo seguent:
+
+```ini
+[mysql]
+host = "localhost"
+user = "root"
+password = ""
+database = "gestio_de_projectes"
+```
+
+5. Guarda: `Ctrl + S`
+6. Tanca el fitxer
+
+**En Mac/Linux (via Terminal):**
+```bash
+nano ~/.streamlit/secrets.toml
+```
+
+Copia i enganxa el contingut anterior, després:
+- Prem `Ctrl + X`
+- Prem `Y`
+- Prem `Enter`
+
+### Pas 3: Verifica la Configuració
+
+El fitxer hauria de tenir aquest aspecte:
+```
+📁 EDV_Comparador/
+   📄 Home.py
+   📄 requirements.txt
+   📄 README.txt
+   📁 .streamlit/
+      📄 secrets.toml
+```
+
+---
+
+## 📦 Instal·lació de Dependències
+
+Les dependències són llibreries (add-ons) que necessita la app.
+
+### Pas 1: Obri Command Prompt/Terminal
+
+**En Windows:**
+- Prem `Windows + R`
+- Escriu `cmd`
+- Prem `Enter`
+
+**En Mac/Linux:**
+- Obre Terminal
+
+### Pas 2: Navega a la Carpeta del Projecte
+
+```bash
+cd C:\Users\TuUsuario\Documents\EDV_Comparador
+```
+
+(Substituteix `C:\Users\TuUsuario` amb la teva ruta correcta)
+
+**En Mac/Linux:**
+```bash
+cd ~/EDV_Comparador
+```
+
+### Pas 3: Instal·la les Dependències
+
+Escriu aquesta comanda i prem Enter:
+
+```bash
+pip install streamlit pandas numpy plotly mysql-connector-python openpyxl
+```
+
+Espera fins que finalitzi (pot tardar 2-5 minuts) ✅
+
+---
+
+## 🎬 Execució de l'Aplicació
+
+### Pas 1: Obre Command Prompt/Terminal
+
+Navega a la carpeta del projecte:
+
+```bash
+cd C:\Users\TuUsuario\Documents\EDV_Comparador
+```
+
+### Pas 2: Executar Streamlit
+
+Escriu:
+
+```bash
+streamlit run Home.py
+```
+
+### Pas 3: Espera i Accedeix
+
+L'aplicació hauria de obrir-se automàticament en el navegador.
+
+Si no, obri manualment:
+- Ves a: `http://localhost:8501`
+
+### Pas 4: Login
+
+Usa aquestes credencials:
+- **Usuari**: `admin`
+- **Contrasenya**: `admin123`
+
+¡Ja està funcionant! ✅
+
+---
+
+## 🛑 Com Parar l'Aplicació
+
+En Command Prompt/Terminal, prem:
+```
+Ctrl + C
+```
+
+---
+
+## 🔄 Com Reiniciar l'Aplicació
+
+Si els dades no s'actualitzen:
+
+```bash
+streamlit cache clear
+streamlit run Home.py
+```
+
+---
+
+## 🐛 Solució de Problemes
+
+### ❌ Error: "python command not found"
+
+**Solució:**
+- Python no está en el PATH
+- Reinicia l'ordinador després de la instal·lació
+- O instal·la Python de nou (marca "Add to PATH")
+
+---
+
+### ❌ Error: "MySQL connection refused"
+
+**Solució:**
+1. Verifica que MySQL està corrent:
+   ```bash
+   mysql -u root
+   ```
+
+2. Si no funciona, reinicia MySQL:
+   
+   **Windows:**
+   - Abre "Servicios" (Services)
+   - Busca "MySQL80"
+   - Fes clic dret → "Reiniciar"
+
+   **Mac:**
+   ```bash
+   brew services restart mysql
+   ```
+
+---
+
+### ❌ Error: "Table edv_fitxes not found"
+
+**Solució:**
+1. Verifica que la BD s'ha creat:
+   ```bash
+   mysql -u root gestio_de_projectes
+   SHOW TABLES;
+   ```
+
+2. Si no veus la taula, importa els dades:
+   ```bash
+   mysql -u root gestio_de_projectes < insert_edv_data_ORDENADO.sql
+   ```
+
+---
+
+### ❌ Error: "Connection refused on secrets.toml"
+
+**Solució:**
+1. Verifica que la carpeta `.streamlit` existeix
+2. Verifica que `secrets.toml` está dins
+3. Reinicia la app:
+   ```bash
+   streamlit cache clear
+   streamlit run Home.py
+   ```
+
+---
+
+### ❌ L'app no s'obre en el navegador
+
+**Solució:**
+1. Copia manualment la URL que surt en la terminal
+2. Obre el navegador
+3. Enganxa la URL (normalment `http://localhost:8501`)
+
+---
+
+### ❌ Error: "ModuleNotFoundError"
+
+**Solució:**
+Instal·la les dependències de nou:
+```bash
+pip install --upgrade streamlit pandas numpy plotly mysql-connector-python openpyxl
+```
+
+---
+
+### ❌ La contrasenya de MySQL no funciona
+
+**Solució:**
+Si vas deixar la contrasenya buida durant la instal·lació:
+1. Intenta accedir sense contrasenya (com al tutorial)
+2. Si has posat contrasenya, edita `.streamlit/secrets.toml`:
+   ```ini
+   [mysql]
+   password = "tua_contrasenya"
+   ```
+
+---
+
+## 📝 Checklist de Verificació
+
+Abans de começar, marca tots els ítems:
+
+- [ ] Python instal·lat i funcionant (`python --version` mostra versió)
+- [ ] MySQL instal·lat i corrient (`mysql -u root` funciona)
+- [ ] Base de dades creat (`gestio_de_projectes` existeix)
+- [ ] Dades importades (taula `edv_fitxes` existeix)
+- [ ] Carpeta `.streamlit` creat
+- [ ] Fitxer `secrets.toml` creat amb configuració correcta
+- [ ] Carpeta `EDV_Comparador` té tots els fitxers necessaris
+- [ ] Dependències instal·lades (`pip install` finalitzat)
+
+Si tots els ítems estàn marcats, estàs llest per executar l'app! 🚀
+
+---
+
+## 🎓 Guia Ràpida (Résumé)
+
+Si ja has fet tot, aquí está el procés ràpid per executar l'app cada día:
+
+1. Obri Command Prompt/Terminal
+2. Navega a la carpeta:
+   ```bash
+   cd C:\Users\TuUsuario\Documents\EDV_Comparador
+   ```
+3. Ejecuta la app:
+   ```bash
+   streamlit run Home.py
+   ```
+4. S'obri el navegador automàticament
+5. Login amb `admin` / `admin123`
+
+---
+
+## 📞 Dubtes Freqüents
+
+**P: On está el fitxer `insert_edv_data_ORDENADO.sql`?**
+A: Hauria de tenir-lo els administradors del projecte. Si no, crea taules buides manualment.
+
+**P: Puc usar contrasenya per a la BD?**
+A: Sí, però edita `secrets.toml` amb la teva contrasenya.
+
+**P: La app és lenta?**
+A: Proba filtrant per sectors o anys específics.
+
+**P: Puc executar la app en altri ordinador?**
+A: Sí, si instal·les Python, MySQL i copies els fitxers.
+
+**P: Puc compartir els dades amb altri persones?**
+A: Sí, usa la sección "📥 Exportar" per descarregar CSV o Excel.
+
+---
+
+## ✅ Felicitacions!
+
+Si has seguit tots els passos i la app funciona:
+
+🎉 **¡L'EDV Comparator está llist per usar!**
+
+Per a més informació sobre les funcionalitats, consulta el fitxer `README.txt`.
+
+---
+
+**Versió**: 1.0  
+**Última actualització**: Novembre 2025  
+**Suport**: Si tens problemes, consulta la secció "Solució de Problemes" d'aquest document.
