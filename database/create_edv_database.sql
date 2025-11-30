@@ -9,6 +9,7 @@
 -- Orden: Campos ordenados exactamente como aparecen en el Excel
 -- ============================================================================
 
+USE gestio_de_projectes;
 CREATE TABLE edv_fitxes (
     -- ========================================================================
     -- IDENTIFICADORES Y METADATOS
@@ -25,8 +26,6 @@ CREATE TABLE edv_fitxes (
     -- INFORMACIÓ SECTOR
     -- ========================================================================
     Codi_Actuacio VARCHAR(255) COMMENT 'Informació sector: Codi Actuació',
-    Nom_Actuacio VARCHAR(255) COMMENT 'Informació sector: Nom Actuació',
-    Municipi VARCHAR(255) COMMENT 'Informació sector: Municipi',
     Tipus_actuacio VARCHAR(255) COMMENT 'Informació sector: Tipus actuació',
     Sol_sistemes DECIMAL(20,10) COMMENT 'Informació sector: Sòl sistemes',
     Sol_zones DECIMAL(20,10) COMMENT 'Informació sector: Sòl zones',
@@ -40,7 +39,6 @@ CREATE TABLE edv_fitxes (
     -- ========================================================================
     -- INFORMACIÓ EDV
     -- ========================================================================
-    Any INT COMMENT 'Informació EDV: Any',
     Hipotesis VARCHAR(255) COMMENT 'Informació EDV: Hipòtesis',
     E1__Programacio VARCHAR(255) COMMENT 'Informació EDV: E1. Programació',
     E2__Adquisicio VARCHAR(255) COMMENT 'Informació EDV: E2. Adquisició',
